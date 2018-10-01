@@ -4,17 +4,55 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Threading;
 
 namespace Temalabor
 {
+    class ThreadInfo
+    {
+        public Matrix b, m;
+        public int startRow, rowCount;
+        public CountdownEvent countdownEvent;
+        public ThreadInfo(Matrix b, Matrix m, int startRow, int rowCount, CountdownEvent countdownEvent)
+        {
+            this.b = b;
+            this.m = m;
+            this.startRow = startRow;
+            this.rowCount = rowCount;
+            this.countdownEvent = countdownEvent;
+        }
+    }
+
     class Program
     {
         static void Main(string[] args)
         {
+            //string[] command = args[0].Split(' ');
             int size = int.Parse(args[0]);
             Matrix a = new Matrix(size);
             Matrix b = new Matrix(size);
             var watch = new Stopwatch();
+            switch (args[1])
+            {
+                case "1":
+                    watch.Start();
+                    a.Multiply01(b);
+                    break;
+                case "2":
+                    watch.Start();
+                    a.Multiply02(b);
+                    break;
+                case "3":
+                    watch.Start();
+                    a.MultiplyThread01(b, int.Parse(args[2]));
+                    break;
+                case "4":
+                    watch.Start();
+                    a.MultiplyThread02(b, int.Parse(args[2]));
+                    break;
+                default:
+                    break;
+            }
             watch.Start();
             a.Multiply01(b);
             watch.Stop();
@@ -28,6 +66,8 @@ namespace Temalabor
     {
         private int[,] data;
         private int size;
+
+        
 
         public Matrix Multiply01(Matrix b)
         {
@@ -43,6 +83,132 @@ namespace Temalabor
                     }
                 }
             }
+            return m;
+        }
+
+        public Matrix Multiply02(Matrix b)
+        {
+            int size = this.size;
+            Matrix m = new Matrix(size, 0);
+            for (int i = 0; i < size; i++)
+            {
+                for (int k = 0; k < size; k++)
+                {
+                    for (int j = 0; j < size; j++)
+                    {
+                        m.data[i, j] += this.data[i, k] * b.data[k, j];
+                    }
+                }
+
+            }
+            return m;
+        }
+
+
+        public Matrix MultiplyThread01(Matrix b, int threadCount)
+        {
+            int size = this.size;
+            Matrix m = new Matrix(size, 0);
+            int rowPerThread;
+            int lastThreadRows;
+            if (b.size % threadCount != 0)
+            {
+                rowPerThread = b.size / (threadCount - 1);
+                lastThreadRows = b.size % (threadCount - 1);
+            }
+            else
+            {
+                rowPerThread = b.size / threadCount;
+                lastThreadRows = 0;
+            }
+
+            using (var countdownEvent = new CountdownEvent(threadCount))
+                {
+                    for (int i = 0; i < threadCount - 1; i++)
+                    {
+                        ThreadPool.QueueUserWorkItem(new WaitCallback(MultiplyPart), new ThreadInfo(b, m, i * rowPerThread, rowPerThread, countdownEvent));
+                    }
+                    ThreadPool.QueueUserWorkItem(new WaitCallback(MultiplyPart), new ThreadInfo(b, m, (threadCount - 1) * rowPerThread, lastThreadRows, countdownEvent));
+
+                    countdownEvent.Wait();
+                }
+                
+
+                return m;
+        }
+
+        public void MultiplyPart(Object tI)
+        {
+            int size = this.size;
+                ThreadInfo threadInfo = tI as ThreadInfo;
+
+            for (int i = 0; i < size; i++)
+            {
+                for (int k = threadInfo.startRow; k < threadInfo.startRow + threadInfo.rowCount; k++)
+                {
+                    for (int j = 0; j < size; j++)
+                    {
+                            threadInfo.m.data[i, j] += this.data[i, k] * threadInfo.b.data[k, j];
+                    }
+                }
+            }
+                threadInfo.countdownEvent.Signal();
+
+        }
+
+        public Matrix MultiplyThread02(Matrix b, int threadCount)
+        {
+            int size = this.size;
+            Matrix m = new Matrix(size, 0);
+            int rowPerThread = b.size / (threadCount - 1);
+            int lastThreadRows = b.size % (threadCount - 1);
+            if (b.size % threadCount != 0)
+            { 
+                rowPerThread = b.size / (threadCount - 1);
+                lastThreadRows = b.size % (threadCount - 1);
+            }else
+            {
+                rowPerThread = b.size / threadCount ;
+                lastThreadRows = 0;
+            }
+
+
+            Task[] taskArray = new Task[threadCount];
+            for (int i = 0; i < taskArray.Length-1; i++)
+            {
+                taskArray[i] = Task.Factory.StartNew(() =>
+                {
+                    for (int l = 0; l < size; l++)
+                    {
+                        for (int k = i * rowPerThread; k < i * rowPerThread + rowPerThread; k++)
+                        {
+                            for (int j = 0; j < size; j++)
+                            {
+                                m.data[l, j] += this.data[l, k] * b.data[k, j];
+                            }
+                        }
+                    }
+                });
+
+                
+            }
+
+            taskArray[threadCount - 1] = Task.Factory.StartNew(() =>
+            {
+                for (int l = 0; l < size; l++)
+                {
+                    for (int k = threadCount - 1 * rowPerThread; k < threadCount - 1 * rowPerThread + lastThreadRows; k++)
+                    {
+                        for (int j = 0; j < size; j++)
+                        {
+                            m.data[l, j] += this.data[l, k] * b.data[k, j];
+                        }
+                    }
+                }
+            });
+
+            Task.WaitAll(taskArray);
+
             return m;
         }
 
