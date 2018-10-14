@@ -48,13 +48,11 @@ namespace Temalabor
                     break;
                 case "4":
                     watch.Start();
-                    a.MultiplyThread02(b, int.Parse(args[2]));
+                    a.MultiplyThread02(b);
                     break;
                 default:
                     break;
             }
-            watch.Start();
-            a.Multiply01(b);
             watch.Stop();
             double elapsed = watch.ElapsedMilliseconds;
             Console.WriteLine(elapsed + "ms");
@@ -156,58 +154,22 @@ namespace Temalabor
 
         }
 
-        public Matrix MultiplyThread02(Matrix b, int threadCount)
+        public Matrix MultiplyThread02(Matrix b)
         {
             int size = this.size;
             Matrix m = new Matrix(size, 0);
-            int rowPerThread = b.size / (threadCount - 1);
-            int lastThreadRows = b.size % (threadCount - 1);
-            if (b.size % threadCount != 0)
-            { 
-                rowPerThread = b.size / (threadCount - 1);
-                lastThreadRows = b.size % (threadCount - 1);
-            }else
-            {
-                rowPerThread = b.size / threadCount ;
-                lastThreadRows = 0;
-            }
 
-
-            Task[] taskArray = new Task[threadCount];
-            for (int i = 0; i < taskArray.Length-1; i++)
+            Parallel.For(0, size, i =>
             {
-                taskArray[i] = Task.Factory.StartNew(() =>
+                for(int j = 0; j < size; j++)
                 {
-                    for (int l = 0; l < size; l++)
+                    for( int k = 0; k < size; k++)
                     {
-                        for (int k = i * rowPerThread; k < i * rowPerThread + rowPerThread; k++)
-                        {
-                            for (int j = 0; j < size; j++)
-                            {
-                                m.data[l, j] += this.data[l, k] * b.data[k, j];
-                            }
-                        }
-                    }
-                });
-
-                
-            }
-
-            taskArray[threadCount - 1] = Task.Factory.StartNew(() =>
-            {
-                for (int l = 0; l < size; l++)
-                {
-                    for (int k = threadCount - 1 * rowPerThread; k < threadCount - 1 * rowPerThread + lastThreadRows; k++)
-                    {
-                        for (int j = 0; j < size; j++)
-                        {
-                            m.data[l, j] += this.data[l, k] * b.data[k, j];
-                        }
+                        m.data[i,j] += this.data[i,k] * b.data[k,j];
                     }
                 }
             });
 
-            Task.WaitAll(taskArray);
 
             return m;
         }
